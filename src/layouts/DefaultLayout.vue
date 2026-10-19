@@ -16,6 +16,7 @@ const collapsed = ref(false)
 
 const allMenus = [
   { path: '/dashboard', title: '运行总览', icon: 'Odometer' },
+  { path: '/map', title: 'SLAM 建图', icon: 'MapLocation' },
   { path: '/control', title: '实时控制', icon: 'Aim', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/routes', title: '路线管理', icon: 'Guide', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/tasks', title: '任务管理', icon: 'List', roles: ['ADMIN', 'OPERATOR'] },

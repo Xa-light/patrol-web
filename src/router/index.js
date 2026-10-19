@@ -21,6 +21,12 @@ const routes = [
         meta: { title: '运行总览', icon: 'Odometer' },
       },
       {
+        path: 'map',
+        name: 'map',
+        component: () => import('../views/SlamMap.vue'),
+        meta: { title: 'SLAM 建图', icon: 'MapLocation' },
+      },
+      {
         path: 'control',
         name: 'control',
         component: () => import('../views/Control.vue'),

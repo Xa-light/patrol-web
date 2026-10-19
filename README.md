@@ -49,7 +49,7 @@ src/
 ├─ router/         路由表与守卫（meta.roles 做角色鉴权，未登录跳 /login）
 ├─ layouts/        DefaultLayout：侧边菜单（按角色过滤）+ 顶栏实时状态条
 ├─ components/     MetricCard（指标卡）、ChartBox（ECharts 封装，含 loading/空/错三态）、StateHint
-├─ views/          Login / Dashboard / Control / Routes / Tasks / Alarms / Logs / Users / 403 / 404
+├─ views/          Login / Dashboard / SlamMap / Control / Routes / Tasks / Alarms / Logs / Users / 403 / 404
 ├─ utils/          时间与字典格式化
 └─ styles/         设计 token 与全局样式
 ```
@@ -63,6 +63,8 @@ src/
 - **三态处理**：列表页均实现 Loading（骨架屏）、空态（带图标与引导文案）、错误态（带重试按钮）。
 - **数据可视化**：总览页 4 张图（电压趋势、任务状态环形、报警趋势堆叠柱、报警类型横向柱），
   控制页 1 个速度仪表盘 + 1 张自绘 SVG 行驶轨迹图。
+- **SLAM 地图**：`/map` 页把阶段3 车端建图结果（1056×1056，0.05 m/px）作为底图，
+  SVG 叠加巡逻路线、历史轨迹、报警点与车辆实时位姿；米↔像素换算见 `SlamMap.vue` 的 `PX()` / `PY()`。
 - **权限降级**：VIEWER 进入只读页面时顶部显示提示条，操作按钮置灰而非隐藏，便于理解权限差异。
 
 ## 与车端的对接
