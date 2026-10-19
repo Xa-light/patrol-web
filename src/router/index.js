@@ -27,6 +27,12 @@ const routes = [
         meta: { title: 'SLAM 建图', icon: 'MapLocation' },
       },
       {
+        path: 'photos',
+        name: 'photos',
+        component: () => import('../views/Photos.vue'),
+        meta: { title: '抓拍相册', icon: 'Camera' },
+      },
+      {
         path: 'control',
         name: 'control',
         component: () => import('../views/Control.vue'),

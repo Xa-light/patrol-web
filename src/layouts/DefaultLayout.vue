@@ -21,6 +21,7 @@ const allMenus = [
   { path: '/routes', title: '路线管理', icon: 'Guide', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/tasks', title: '任务管理', icon: 'List', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/alarms', title: '报警中心', icon: 'Warning' },
+  { path: '/photos', title: '抓拍相册', icon: 'Camera' },
   { path: '/logs', title: '操作日志', icon: 'Document', roles: ['ADMIN', 'OPERATOR'] },
   { path: '/users', title: '用户管理', icon: 'User', roles: ['ADMIN'] },
 ]

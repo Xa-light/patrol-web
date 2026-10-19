@@ -49,7 +49,7 @@ src/
 ├─ router/         路由表与守卫（meta.roles 做角色鉴权，未登录跳 /login）
 ├─ layouts/        DefaultLayout：侧边菜单（按角色过滤）+ 顶栏实时状态条
 ├─ components/     MetricCard（指标卡）、ChartBox（ECharts 封装，含 loading/空/错三态）、StateHint
-├─ views/          Login / Dashboard / SlamMap / Control / Routes / Tasks / Alarms / Logs / Users / 403 / 404
+├─ views/          Login / Dashboard / SlamMap / Control / Photos / Routes / Tasks / Alarms / Logs / Users / 403 / 404
 ├─ utils/          时间与字典格式化
 └─ styles/         设计 token 与全局样式
 ```
@@ -65,6 +65,10 @@ src/
   控制页 1 个速度仪表盘 + 1 张自绘 SVG 行驶轨迹图。
 - **SLAM 地图**：`/map` 页把阶段3 车端建图结果（1056×1056，0.05 m/px）作为底图，
   SVG 叠加巡逻路线、历史轨迹、报警点与车辆实时位姿；米↔像素换算见 `SlamMap.vue` 的 `PX()` / `PY()`。
+- **自主巡逻**：控制页独立卡片，走 `cmd/task{action:start|stop}`。启动后**只发 task、不发 control**，
+  否则会把车端刚进入的 auto 模式顶成 manual（车端仲裁优先级 `estop > rc > teleop > 云端控制 > 自主`）。
+- **抓拍相册**：`/photos` 页下发 `cmd/task{action:photo}`，车端拍照后 HTTP 上传，列表自动刷新；
+  支持原因分类、全屏预览、只读角色降级。
 - **权限降级**：VIEWER 进入只读页面时顶部显示提示条，操作按钮置灰而非隐藏，便于理解权限差异。
 
 ## 与车端的对接

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import ChartBox from '../components/ChartBox.vue'
-import { drive, setEstop } from '../api/vehicle'
+import { drive, setEstop, startPatrol, stopPatrol } from '../api/vehicle'
 import { useVehicleStore } from '../stores/vehicle'
 import { useAuthStore } from '../stores/auth'
 import { fmtNum, fmtDateTime } from '../utils/format'
@@ -112,6 +112,32 @@ onBeforeUnmount(() => {
 
 const canControl = computed(() => auth.hasRole('ADMIN', 'OPERATOR'))
 
+/* ---------------- 自主巡逻 ---------------- */
+const patrolling = computed(() => !!vehicle.telemetry?.patrolling)
+const patrolBusy = ref('')
+
+async function togglePatrol(action) {
+  patrolBusy.value = action
+  try {
+    const data = action === 'start'
+      ? await startPatrol(vehicle.sn)
+      : await stopPatrol(vehicle.sn)
+    pushLog(
+      action === 'start'
+        ? `启动自主巡逻 → ${data?.topic || 'task start'}`
+        : `停止巡逻 → ${data?.topic || 'task stop'}`,
+      true
+    )
+    ElMessage.success(action === 'start' ? '已下发启动巡逻指令' : '已下发停止巡逻指令')
+    // 等车端下一次遥测回来再刷新按钮状态
+    setTimeout(() => vehicle.refresh(), 600)
+  } catch (e) {
+    pushLog(`巡逻指令失败：${e.message}`, false)
+  } finally {
+    patrolBusy.value = ''
+  }
+}
+
 const gaugeOption = computed(() => ({
   series: [
     {
@@ -196,6 +222,7 @@ const currentPoint = computed(() => {
     />
 
     <div class="grid">
+      <div class="col">
       <!-- 遥控区 -->
       <div class="card card-pad">
         <div class="card-head">
@@ -258,6 +285,43 @@ const currentPoint = computed(() => {
           </div>
         </div>
         <p class="tip">车端仲裁层限速 0.8 m/s / 1.0 rad/s，超限会被自动夹紧；松开方向键自动停车。</p>
+      </div>
+
+      <!-- 自主巡逻 -->
+      <div class="card card-pad patrol-card">
+        <div class="card-head">
+          <div class="card-title">自主巡逻 <span class="card-sub">车端按路线自主行驶</span></div>
+          <span class="patrol-state" :class="{ on: patrolling }">
+            <span class="dot" :class="patrolling ? 'on' : 'off'" />
+            {{ patrolling ? '巡逻中' : '已停止' }}
+          </span>
+        </div>
+
+        <div class="patrol-actions">
+          <el-button
+            type="primary"
+            :icon="'VideoPlay'"
+            :loading="patrolBusy === 'start'"
+            :disabled="!canControl || estop || patrolling"
+            @click="togglePatrol('start')"
+          >
+            启动自主巡逻
+          </el-button>
+          <el-button
+            :icon="'VideoPause'"
+            :loading="patrolBusy === 'stop'"
+            :disabled="!canControl || !patrolling"
+            @click="togglePatrol('stop')"
+          >
+            停止巡逻
+          </el-button>
+        </div>
+
+        <p class="tip">
+          启动后车端进入 auto 模式，云端不再下发遥控指令（否则会被顶成 manual）。
+          当前模式：<b>{{ vehicle.mode }}</b>
+        </p>
+      </div>
       </div>
 
       <!-- 遥测区 -->
@@ -409,6 +473,13 @@ const currentPoint = computed(() => {
 }
 .seg button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 .tip { font-size: 11px; color: var(--text-3); line-height: 1.6; margin: 14px 0 0; }
+
+/* 自主巡逻 */
+.patrol-state { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.patrol-state.on { color: var(--ok); }
+.patrol-actions { display: flex; gap: 10px; margin-top: 4px; }
+.patrol-actions .el-button { flex: 1; margin-left: 0; }
+.patrol-card .tip b { color: var(--text-2); font-weight: 500; }
 
 .telem {
   display: grid;

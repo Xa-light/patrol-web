@@ -21,5 +21,8 @@ export const stopPatrol = (sn = 'scout01') => request.post('/api/v1/patrol/stop'
 export const capturePhoto = (sn = 'scout01', reason = 'cloud') =>
   request.post('/api/v1/photo/capture', { sn, reason })
 
+export const listPhotos = (params = {}, config = {}) =>
+  request.get('/api/v1/photos', { params, ...config })
+
 export const listMqttPhotos = (params = {}, config = {}) =>
   request.get('/api/v1/mqtt/photos', { params, ...config })
