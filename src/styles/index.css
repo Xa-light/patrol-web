@@ -1,0 +1,121 @@
+:root {
+  --brand: #2b6cf6;
+  --brand-dark: #1e56d6;
+  --brand-weak: #eaf1ff;
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --border: #e6eaf0;
+  --border-strong: #d5dae2;
+  --text: #1f2430;
+  --text-2: #5a6577;
+  --text-3: #8b95a5;
+  --ok: #22b573;
+  --ok-weak: #e6f7ed;
+  --warn: #e6a23c;
+  --warn-weak: #fdf6ec;
+  --danger: #e04b3c;
+  --danger-weak: #fdeeec;
+  --info: #5b8def;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --sidebar-w: 216px;
+
+  --el-color-primary: #2b6cf6;
+  --el-border-radius-base: 8px;
+  --el-font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--brand); text-decoration: none; }
+
+/* ---------- 通用卡片 ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.card-pad { padding: 18px 20px; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+/* ---------- 页面骨架 ---------- */
+.page {
+  padding: 20px 24px 32px;
+  max-width: 1440px;
+}
+
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.spacer { flex: 1; }
+
+.muted { color: var(--text-3); }
+.mono { font-family: ui-monospace, Consolas, monospace; }
+
+/* ---------- 状态点 ---------- */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(34, 181, 115, 0.16); }
+.dot.off { background: #c9d0da; }
+
+/* ---------- Element Plus 微调 ---------- */
+.el-card { border-radius: var(--radius); }
+.el-table { --el-table-border-color: var(--border); }
+.el-table th.el-table__cell { background: #fafbfd; color: var(--text-2); font-weight: 500; }
+.el-dialog { border-radius: var(--radius); }
+.el-button--primary { --el-button-bg-color: var(--brand); --el-button-border-color: var(--brand); }
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d9dee7; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #c3cad6; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 720px) {
+  .page { padding: 14px; }
+}
