@@ -49,7 +49,7 @@ src/
 ├─ router/         路由表与守卫（meta.roles 做角色鉴权，未登录跳 /login）
 ├─ layouts/        DefaultLayout：侧边菜单（按角色过滤）+ 顶栏实时状态条
 ├─ components/     MetricCard（指标卡）、ChartBox（ECharts 封装，含 loading/空/错三态）、StateHint
-├─ views/          Login / Dashboard / SlamMap / Control / Photos / Routes / Tasks / Alarms / Logs / Users / 403 / 404
+├─ views/          Login / Dashboard / SlamMap / Control / Vehicles / Photos / Routes / Tasks / Alarms / Logs / Users / 403 / 404
 ├─ utils/          时间与字典格式化
 └─ styles/         设计 token 与全局样式
 ```
@@ -70,6 +70,31 @@ src/
 - **抓拍相册**：`/photos` 页下发 `cmd/task{action:photo}`，车端拍照后 HTTP 上传，列表自动刷新；
   支持原因分类、全屏预览、只读角色降级。
 - **权限降级**：VIEWER 进入只读页面时顶部显示提示条，操作按钮置灰而非隐藏，便于理解权限差异。
+- **车辆管理**：`/vehicles` 页对应车端「机器人列表」能力，支持注册、编辑、删除、状态上报与
+  `telemetry/latest` 原文查看；详情抽屉内置方向盘遥控（前进/后退/左转/右转/停止）与急停开关，
+  与 `/control` 页共用同一套 `remote/*` 接口，仅面向 ADMIN/OPERATOR 开放。
+- **导航代理**：`/api/v1/nav/*` 由后端转发到车端 Web 服务（`VEHICLE_WEB_URL`，默认
+  `http://192.168.1.102:8080`），前端不直连车端，跨网段部署时只需改后端环境变量。
+- **接口覆盖**：后端 OpenAPI 暴露的 54 条业务接口在 `src/api/` 下均有对应封装，
+  页面不再有「只调前端假数据」的入口；覆盖情况可用测试脚本随时复核。
+- **视觉规范**：主色为紫色系（`--brand: #7c3aed`），侧边栏深紫渐变 + 多页签，
+  列表页统一「筛选条 → 表格 → 分页」三段式，弹窗统一「标题 / 内容 / 底部操作」结构；
+  全部色值集中在 `src/styles/index.css` 的设计 token 中，便于整体换肤。
+
+## 接口自动化测试
+
+`tests/api-test.mjs` 是零第三方依赖的接口测试脚本（Node.js ≥ 18，使用原生 `fetch`），
+按 16 个模块组织 76 条用例，覆盖正向流程、参数校验、越权访问与资源清理。
+
+```bash
+# 后端需先启动在 127.0.0.1:8000
+node tests/api-test.mjs                      # 默认跳过会驱动实车的用例
+node tests/api-test.mjs --allow-motion       # 纳入遥控/巡逻用例（实车在环时使用）
+node tests/api-test.mjs --base=http://192.168.1.106:8000
+```
+
+脚本会逐条打印「编号 / 模块 / 用例 / 状态码 / 耗时 / 结果」，结束时输出模块统计与通过率，
+并把全量明细写入 `tests/report/api-test-result.json`；退出码在有失败时为 1，可直接接入 CI。
 
 ## 与车端的对接
 
