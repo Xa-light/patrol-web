@@ -5,5 +5,7 @@ export const listTasks = (params = {}, config = {}) =>
 
 export const createTask = (payload) => request.post('/api/v1/tasks', payload)
 
+export const getTask = (taskId) => request.get(`/api/v1/tasks/${taskId}`)
+
 export const updateTaskStatus = (taskId, action, reason) =>
   request.patch(`/api/v1/tasks/${taskId}/status`, { action, reason })

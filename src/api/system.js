@@ -7,6 +7,8 @@ export const listLogs = (params = {}, config = {}) =>
 // 读取接口返回 camelCase（displayName / userId），此处做一次适配。
 export const listUsers = (config = {}) => request.get('/api/v1/users', config)
 
+export const getUser = (userId) => request.get(`/api/v1/users/${userId}`)
+
 export const createUser = ({ username, password, displayName, role }) =>
   request.post('/api/v1/users', {
     username,
