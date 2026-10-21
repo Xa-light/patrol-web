@@ -29,18 +29,18 @@ const recentLoading = ref(true)
 let timer = null
 
 const COLORS = {
-  blue: '#2b6cf6',
+  blue: '#7c3aed',
   green: '#22b573',
   amber: '#e6a23c',
   red: '#e04b3c',
-  purple: '#7f77dd',
+  purple: '#a78bfa',
   gray: '#b4b2a9',
 }
 
 const axisCommon = {
-  axisLine: { lineStyle: { color: '#e6eaf0' } },
+  axisLine: { lineStyle: { color: '#ece5f6' } },
   axisTick: { show: false },
-  axisLabel: { color: '#8b95a5', fontSize: 11 },
+  axisLabel: { color: '#9b93a9', fontSize: 11 },
 }
 
 async function loadAll(silent = false) {
@@ -140,7 +140,7 @@ const alarmTrendOption = computed(() => {
       ...axisCommon,
       axisLabel: { ...axisCommon.axisLabel, interval: 3 },
     },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f0f3f8' } }, ...axisCommon },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f4effb' } }, ...axisCommon },
     series: [
       { name: '严重', type: 'bar', stack: 'a', barMaxWidth: 14, data: items.map((i) => i.critical), itemStyle: { color: COLORS.red } },
       { name: '警告', type: 'bar', stack: 'a', barMaxWidth: 14, data: items.map((i) => i.warning), itemStyle: { color: COLORS.amber } },
@@ -186,20 +186,20 @@ const typeOption = computed(() => {
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 74, right: 24, top: 10, bottom: 10 },
-    xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f0f3f8' } }, ...axisCommon },
+    xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f4effb' } }, ...axisCommon },
     yAxis: {
       type: 'category',
       data: items.map((i) => ALARM_TYPE_TEXT[i.type] || i.type),
       ...axisCommon,
-      axisLabel: { color: '#5a6577', fontSize: 12 },
+      axisLabel: { color: '#5f5670', fontSize: 12 },
     },
     series: [
       {
         type: 'bar',
         barMaxWidth: 16,
         data: items.map((i) => i.count),
-        itemStyle: { color: '#5b8def', borderRadius: [0, 4, 4, 0] },
-        label: { show: true, position: 'right', color: '#8b95a5', fontSize: 11 },
+        itemStyle: { color: '#8b5cf6', borderRadius: [0, 4, 4, 0] },
+        label: { show: true, position: 'right', color: '#9b93a9', fontSize: 11 },
       },
     ],
   }

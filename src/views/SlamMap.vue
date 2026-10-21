@@ -1,13 +1,16 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import StateHint from '../components/StateHint.vue'
-import { getMapMeta } from '../api/map'
+import { getMapMeta, getNavState, navTo, navSetPose, navRelocalize, navCancel } from '../api/map'
 import { listRoutes } from '../api/route'
 import { listAlarms } from '../api/alarm'
 import { useVehicleStore } from '../stores/vehicle'
+import { useAuthStore } from '../stores/auth'
 import { fmtNum, fmtDateTime } from '../utils/format'
 
 const vehicle = useVehicleStore()
+const auth = useAuthStore()
 
 const meta = ref(null)
 const routes = ref([])
@@ -17,7 +20,61 @@ const error = ref('')
 const imgError = ref(false)
 const box = ref(null)
 
-const show = reactive({ route: true, trail: true, alarm: true })
+const show = reactive({ route: true, trail: true, alarm: true, path: true })
+
+/* ---------------- 导航（车端 8080 能力并入） ---------------- */
+const nav = ref(null)          // 车端 /state 原始数据
+const navOnline = ref(false)   // 车端网页是否可达
+const clickMode = ref('none')  // none | goal | pose
+const navBusy = ref(false)
+const canNav = computed(() => auth.hasRole('ADMIN', 'OPERATOR'))
+let navTimer = null
+
+async function pollNav() {
+  try {
+    const s = await getNavState({ silent: true })
+    nav.value = s
+    navOnline.value = true
+  } catch (e) {
+    navOnline.value = false
+  }
+}
+
+function toggleMode(mode) {
+  if (!canNav.value) return ElMessage.warning('当前角色无导航操作权限')
+  clickMode.value = clickMode.value === mode ? 'none' : mode
+  if (clickMode.value === 'goal') ElMessage.info('在地图上点击要去的点')
+  if (clickMode.value === 'pose') ElMessage.info('在地图上点击车辆实际所在的位置')
+}
+
+async function doCancel() {
+  if (!canNav.value) return ElMessage.warning('当前角色无操作权限')
+  navBusy.value = true
+  try {
+    await navCancel()
+    ElMessage.success('已取消当前导航目标')
+    pollNav()
+  } catch (e) {
+    ElMessage.error(e.message || '取消失败')
+  } finally {
+    navBusy.value = false
+  }
+}
+
+async function doRelocalize() {
+  if (!canNav.value) return ElMessage.warning('当前角色无操作权限')
+  navBusy.value = true
+  try {
+    await navRelocalize()
+    ElMessage.success('已启动自动重新定位，约 60–80 秒，期间请勿移动车辆')
+    pollNav()
+  } catch (e) {
+    ElMessage.error(e.message || '重定位失败')
+  } finally {
+    navBusy.value = false
+  }
+}
+
 
 const scale = ref(1)
 const tx = ref(0)
@@ -127,21 +184,74 @@ function onWheel(e) {
 }
 
 let drag = null
+let moved = false
 function onDown(e) {
   if (e.button !== 0) return
   drag = { x: e.clientX, y: e.clientY, tx: tx.value, ty: ty.value }
+  moved = false
   window.addEventListener('mousemove', onMove)
   window.addEventListener('mouseup', onUp)
 }
 function onMove(e) {
   if (!drag) return
+  if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) moved = true
   tx.value = drag.tx + (e.clientX - drag.x)
   ty.value = drag.ty + (e.clientY - drag.y)
 }
-function onUp() {
+function onUp(e) {
+  const wasDrag = moved
   drag = null
   window.removeEventListener('mousemove', onMove)
   window.removeEventListener('mouseup', onUp)
+  if (!wasDrag && e && clickMode.value !== 'none') handleMapClick(e)
+}
+
+/** 屏幕坐标 → 地图像素 → map 坐标（米） */
+function handleMapClick(e) {
+  const el = box.value
+  if (!el || !meta.value) return
+  const rect = el.getBoundingClientRect()
+  const px = (e.clientX - rect.left - tx.value) / scale.value
+  const py = (e.clientY - rect.top - ty.value) / scale.value
+  const m = meta.value
+  const x = px * m.resolution + m.origin.x
+  const y = (m.height - py) * m.resolution + m.origin.y
+  const b = m.bounds
+  if (b && (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY)) {
+    ElMessage.warning('该点超出地图范围')
+    return
+  }
+  if (clickMode.value === 'goal') sendGoal(x, y)
+  else if (clickMode.value === 'pose') sendPose(x, y)
+}
+
+async function sendGoal(x, y) {
+  navBusy.value = true
+  try {
+    await navTo(x, y)
+    ElMessage.success(`已下发目标点 (${x.toFixed(2)}, ${y.toFixed(2)})`)
+    clickMode.value = 'none'
+    pollNav()
+  } catch (e) {
+    ElMessage.error(e.message || '下发目标失败')
+  } finally {
+    navBusy.value = false
+  }
+}
+
+async function sendPose(x, y) {
+  const yaw = Number(vehicle.telemetry?.yaw ?? 0)
+  navBusy.value = true
+  try {
+    await navSetPose(x, y, yaw)
+    ElMessage.success(`已把车辆初始位姿设为 (${x.toFixed(2)}, ${y.toFixed(2)})`)
+    clickMode.value = 'none'
+    pollNav()
+  } catch (e) {
+    ElMessage.error(e.message || '设置位姿失败')
+  } finally {
+    navBusy.value = false
+  }
 }
 
 function onResize() {
@@ -183,6 +293,35 @@ const alarmPins = computed(() =>
   }))
 )
 
+/* 车端规划路线（move_base global plan，抽稀后） */
+const pathPoints = computed(() => {
+  const p = nav.value?.path
+  if (!Array.isArray(p) || !p.length) return ''
+  return p.map(([x, y]) => `${PX(x).toFixed(1)},${PY(y).toFixed(1)}`).join(' ')
+})
+
+/* 目标点 */
+const goalPin = computed(() => {
+  const g = nav.value?.goal
+  if (!g || g.x == null || g.y == null) return null
+  return { x: PX(g.x), y: PY(g.y), mx: g.x, my: g.y }
+})
+
+const navStatus = computed(() => {
+  const s = nav.value
+  if (!navOnline.value) return { text: '车端未连接', type: 'info' }
+  if (!s) return { text: '—', type: 'info' }
+  if (s.reloc === 'running') return { text: '重新定位中…', type: 'warning' }
+  const map = {
+    idle: '空闲', navigating: '导航中', reached: '已到达',
+    cancelled: '已取消', failed: '导航失败',
+  }
+  const type = s.mb_status === 'failed' ? 'danger'
+    : s.mb_status === 'navigating' ? 'primary'
+      : s.mb_status === 'reached' ? 'success' : 'info'
+  return { text: map[s.mb_status] || s.mb_status || '—', type }
+})
+
 const waypointDots = computed(() => {
   const out = []
   routes.value.forEach((r) => (r.waypoints || []).forEach((w, i) => {
@@ -216,10 +355,13 @@ onMounted(async () => {
   if (!vehicle.vehicles.length) vehicle.refresh()
   vehicle.loadTrailHistory(3)
   await load()
+  pollNav()
+  navTimer = setInterval(pollNav, 1000)
   window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
+  if (navTimer) clearInterval(navTimer)
   window.removeEventListener('resize', onResize)
   window.removeEventListener('mousemove', onMove)
   window.removeEventListener('mouseup', onUp)
@@ -249,11 +391,27 @@ onBeforeUnmount(() => {
               <el-button @click="zoomBy(1.3)">＋</el-button>
               <el-button @click="zoomBy(1 / 1.3)">－</el-button>
             </el-button-group>
+            <el-button-group size="small">
+              <el-button
+                :type="clickMode === 'goal' ? 'primary' : 'default'"
+                :disabled="!canNav || navBusy"
+                @click="toggleMode('goal')"
+              >点选导航</el-button>
+              <el-button :disabled="!canNav || navBusy || !nav?.goal" @click="doCancel">取消目标</el-button>
+            </el-button-group>
+            <el-button-group size="small">
+              <el-button :disabled="!canNav || navBusy" @click="doRelocalize">自动重新定位</el-button>
+              <el-button
+                :type="clickMode === 'pose' ? 'primary' : 'default'"
+                :disabled="!canNav || navBusy"
+                @click="toggleMode('pose')"
+              >设初始位姿</el-button>
+            </el-button-group>
             <el-button size="small" @click="load">刷新</el-button>
           </div>
         </div>
 
-        <div ref="box" class="map-box" @wheel="onWheel" @mousedown="onDown">
+        <div ref="box" class="map-box" :class="{ picking: clickMode !== 'none' }" @wheel="onWheel" @mousedown="onDown">
           <div class="map-stage" :style="{ transform }">
             <img
               class="map-img"
@@ -276,8 +434,8 @@ onBeforeUnmount(() => {
                   <polygon
                     v-if="s.closed"
                     :points="s.points"
-                    fill="rgba(43,108,246,0.10)"
-                    stroke="#2b6cf6"
+                    fill="rgba(124,58,237,0.10)"
+                    stroke="#7c3aed"
                     stroke-width="2"
                     stroke-dasharray="7 4"
                   />
@@ -285,7 +443,7 @@ onBeforeUnmount(() => {
                     v-else
                     :points="s.points"
                     fill="none"
-                    stroke="#2b6cf6"
+                    stroke="#7c3aed"
                     stroke-width="2"
                     stroke-dasharray="7 4"
                   />
@@ -297,7 +455,7 @@ onBeforeUnmount(() => {
                   :cy="w.y"
                   r="4.5"
                   fill="#fff"
-                  stroke="#2b6cf6"
+                  stroke="#7c3aed"
                   stroke-width="2"
                 />
               </template>
@@ -335,12 +493,35 @@ onBeforeUnmount(() => {
                 </g>
               </g>
 
+              <!-- 车端规划路线 -->
+              <polyline
+                v-if="show.path && pathPoints"
+                :points="pathPoints"
+                fill="none"
+                stroke="#e07a1f"
+                stroke-width="2.4"
+                stroke-dasharray="6 5"
+                stroke-linejoin="round"
+                opacity="0.9"
+              />
+
+              <!-- 目标点 -->
+              <g v-if="goalPin">
+                <circle :cx="goalPin.x" :cy="goalPin.y" r="16" fill="#e07a1f" opacity="0.15" />
+                <path
+                  :d="`M${goalPin.x - 9} ${goalPin.y} H${goalPin.x + 9} M${goalPin.x} ${goalPin.y - 9} V${goalPin.y + 9}`"
+                  stroke="#e07a1f"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                />
+              </g>
+
               <!-- 车辆位姿 -->
               <g v-if="veh" :transform="`translate(${veh.x},${veh.y}) rotate(${veh.deg})`">
-                <circle r="15" fill="#2b6cf6" opacity="0.14" />
-                <circle r="8.5" fill="#2b6cf6" stroke="#fff" stroke-width="2" />
-                <path d="M8.5 0 L20 0" stroke="#2b6cf6" stroke-width="3" stroke-linecap="round" />
-                <path d="M20 -4.5 L27 0 L20 4.5 Z" fill="#2b6cf6" />
+                <circle r="15" fill="#2563eb" opacity="0.14" />
+                <circle r="8.5" fill="#2563eb" stroke="#fff" stroke-width="2" />
+                <path d="M8.5 0 L20 0" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" />
+                <path d="M20 -4.5 L27 0 L20 4.5 Z" fill="#2563eb" />
               </g>
             </svg>
           </div>
@@ -352,8 +533,10 @@ onBeforeUnmount(() => {
 
           <div class="map-legend">
             <span><i class="lg route" />巡逻路线</span>
+            <span><i class="lg path" />规划路线</span>
             <span><i class="lg trail" />历史轨迹</span>
             <span><i class="lg alarm" />报警点</span>
+            <span><i class="lg goal" />目标点</span>
             <span><i class="lg car" />车辆</span>
           </div>
 
@@ -362,7 +545,11 @@ onBeforeUnmount(() => {
             <span>{{ scaleBar.meters }} m</span>
           </div>
 
-          <div class="zoom-hint">滚轮缩放 · 按住拖拽平移</div>
+          <div class="zoom-hint">
+            {{ clickMode === 'goal' ? '点击地图选择导航目标 · 再点一次按钮取消'
+              : clickMode === 'pose' ? '点击地图指定车辆实际位置 · 再点一次按钮取消'
+                : '滚轮缩放 · 按住拖拽平移' }}
+          </div>
         </div>
       </div>
 
@@ -408,10 +595,29 @@ onBeforeUnmount(() => {
 
         <div class="card card-pad">
           <div class="card-head">
+            <div class="card-title">导航控制</div>
+            <el-tag size="small" :type="navStatus.type" effect="light">{{ navStatus.text }}</el-tag>
+          </div>
+          <div class="kv">
+            <div><span>车端接口</span><b>{{ navOnline ? '已连接' : '未连接' }}</b></div>
+            <div><span>目标点</span><b class="mono">{{ goalPin ? goalPin.mx.toFixed(2) + ', ' + goalPin.my.toFixed(2) : '—' }}</b></div>
+            <div><span>规划路径</span><b>{{ nav?.path?.length || 0 }} 点</b></div>
+            <div><span>任务状态</span><b>{{ nav?.mb_status || '—' }}</b></div>
+          </div>
+          <div v-if="nav?.msg" class="src">{{ nav.msg }}</div>
+          <div v-else class="src">
+            点「点选导航」后在地图上单击目标点，车端会先停巡逻、再启动任务、最后下发目标；
+            虚线为 move_base 的规划路径，1 秒刷新。
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-head">
             <div class="card-title">图层</div>
           </div>
           <div class="layers">
             <label><el-switch v-model="show.route" size="small" /> 巡逻路线（{{ routeShapes.length }} 条）</label>
+            <label><el-switch v-model="show.path" size="small" /> 规划路线（{{ nav?.path?.length || 0 }} 点）</label>
             <label><el-switch v-model="show.trail" size="small" /> 历史轨迹（{{ vehicle.trail.length }} 点）</label>
             <label><el-switch v-model="show.alarm" size="small" /> 待处理报警（{{ alarmPins.length }} 个）</label>
           </div>
@@ -439,21 +645,22 @@ onBeforeUnmount(() => {
 }
 .map-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   padding: 2px 4px 12px;
 }
-.tools { display: flex; gap: 8px; align-items: center; }
+.map-toolbar .card-title { white-space: nowrap; flex: none; }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 .map-box {
   position: relative;
-  height: calc(100vh - 230px);
+  height: calc(100vh - 272px);
   min-height: 460px;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #eef1f6;
+  background: #efeaf8;
   cursor: grab;
   user-select: none;
 }
@@ -504,10 +711,21 @@ onBeforeUnmount(() => {
 }
 .map-legend span { display: flex; align-items: center; gap: 6px; }
 .lg { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
-.lg.route { background: #2b6cf6; }
+.lg.route { background: #7c3aed; }
+.lg.path {
+  background: repeating-linear-gradient(90deg, #e07a1f 0 4px, transparent 4px 7px);
+}
 .lg.trail { background: #1c9a63; opacity: 0.7; }
 .lg.alarm { width: 9px; height: 9px; border-radius: 50%; background: #cf4436; }
-.lg.car { width: 9px; height: 9px; border-radius: 50%; background: #2b6cf6; }
+.lg.goal {
+  width: 10px; height: 10px; border-radius: 0;
+  background:
+    linear-gradient(#e07a1f, #e07a1f) center / 10px 2px no-repeat,
+    linear-gradient(#e07a1f, #e07a1f) center / 2px 10px no-repeat;
+}
+.lg.car { width: 9px; height: 9px; border-radius: 50%; background: #2563eb; }
+.map-box.picking { cursor: crosshair; }
+.map-box.picking:active { cursor: crosshair; }
 
 .scale-bar {
   position: absolute;

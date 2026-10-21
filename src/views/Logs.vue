@@ -163,7 +163,7 @@ onMounted(load)
   background: #f0f3f8;
   color: var(--text-2);
 }
-.method.get { background: #eaf1ff; color: #2b6cf6; }
+.method.get { background: #f1e9fe; color: #7c3aed; }
 .method.post { background: #e6f7ed; color: #1c9a63; }
 .method.put, .method.patch { background: #fdf6ec; color: #c98118; }
 .method.delete { background: #fdeeec; color: #cf4436; }

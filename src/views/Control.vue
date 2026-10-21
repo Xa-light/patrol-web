@@ -149,22 +149,22 @@ const gaugeOption = computed(() => ({
       splitNumber: 4,
       radius: '96%',
       center: ['50%', '60%'],
-      progress: { show: true, width: 9, itemStyle: { color: '#2b6cf6' } },
-      axisLine: { lineStyle: { width: 9, color: [[1, '#eef1f6']] } },
+      progress: { show: true, width: 9, itemStyle: { color: '#7c3aed' } },
+      axisLine: { lineStyle: { width: 9, color: [[1, '#f1ecfa']] } },
       axisTick: { show: false },
-      splitLine: { length: 5, lineStyle: { color: '#d8dfea', width: 1 } },
-      axisLabel: { color: '#98a2b3', fontSize: 9, distance: 10 },
-      pointer: { width: 4, length: '56%', itemStyle: { color: '#2b6cf6' } },
-      anchor: { show: true, size: 7, itemStyle: { color: '#2b6cf6' } },
+      splitLine: { length: 5, lineStyle: { color: '#ded3ef', width: 1 } },
+      axisLabel: { color: '#9b93a9', fontSize: 9, distance: 10 },
+      pointer: { width: 4, length: '56%', itemStyle: { color: '#7c3aed' } },
+      anchor: { show: true, size: 7, itemStyle: { color: '#7c3aed' } },
       detail: {
         valueAnimation: true,
         offsetCenter: [0, '52%'],
         formatter: (v) => `${Number(v).toFixed(2)}`,
-        color: '#1f2430',
+        color: '#221a30',
         fontSize: 20,
         fontWeight: 600,
       },
-      title: { show: true, offsetCenter: [0, '78%'], color: '#98a2b3', fontSize: 11 },
+      title: { show: true, offsetCenter: [0, '78%'], color: '#9b93a9', fontSize: 11 },
       data: [{ value: Math.abs(Number(vehicle.speed) || 0), name: 'm/s' }],
     },
   ],
@@ -322,6 +322,7 @@ const currentPoint = computed(() => {
           当前模式：<b>{{ vehicle.mode }}</b>
         </p>
       </div>
+
       </div>
 
       <!-- 遥测区 -->
@@ -358,9 +359,9 @@ const currentPoint = computed(() => {
               <span class="muted mini">{{ vehicle.trail.length }} 点</span>
             </div>
             <svg v-if="trailPath" class="trail" viewBox="0 0 300 180">
-              <path :d="trailPath" fill="none" stroke="#2b6cf6" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75" />
-              <circle v-if="currentPoint" :cx="currentPoint.x" :cy="currentPoint.y" r="5" fill="#2b6cf6" />
-              <circle v-if="currentPoint" :cx="currentPoint.x" :cy="currentPoint.y" r="9" fill="none" stroke="#2b6cf6" opacity="0.3" />
+              <path :d="trailPath" fill="none" stroke="#7c3aed" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.75" />
+              <circle v-if="currentPoint" :cx="currentPoint.x" :cy="currentPoint.y" r="5" fill="#7c3aed" />
+              <circle v-if="currentPoint" :cx="currentPoint.x" :cy="currentPoint.y" r="9" fill="none" stroke="#7c3aed" opacity="0.3" />
             </svg>
             <div v-else class="trail-empty">暂无轨迹（车辆移动后自动绘制）</div>
           </div>
@@ -378,6 +379,25 @@ const currentPoint = computed(() => {
             <div><span>控制模式</span><b>{{ vehicle.telemetry?.control_mode ?? '—' }}</b><em /></div>
           </div>
         </div>
+
+      <!-- 链路信息 -->
+      <div class="card card-pad link-card">
+        <div class="card-head">
+          <div class="card-title">链路信息 <span class="card-sub">车端 → 云端</span></div>
+          <span class="live" :class="{ on: vehicle.online }">
+            <span class="dot" :class="vehicle.online ? 'on' : 'off'" />
+            {{ vehicle.online ? '链路正常' : '链路中断' }}
+          </span>
+        </div>
+        <div class="link-grid">
+          <div class="lk"><span>车辆编号</span><b class="mono">{{ vehicle.sn }}</b></div>
+          <div class="lk"><span>上报主题</span><b class="mono">scout/{{ vehicle.sn }}/telemetry</b></div>
+          <div class="lk"><span>指令主题</span><b class="mono">scout/{{ vehicle.sn }}/cmd/control</b></div>
+          <div class="lk"><span>指令有效期</span><b>800 ms</b></div>
+          <div class="lk"><span>仲裁优先级</span><b>estop &gt; rc &gt; teleop &gt; cloud &gt; auto</b></div>
+          <div class="lk"><span>最后心跳</span><b>{{ vehicle.lastUpdated ? fmtDateTime(vehicle.lastUpdated) : '—' }}</b></div>
+        </div>
+      </div>
       </div>
 
       <!-- 指令日志 -->
@@ -421,7 +441,7 @@ const currentPoint = computed(() => {
 .pad-btn {
   height: 74px;
   border: 1px solid var(--border-strong);
-  background: #fbfcfe;
+  background: #fdfbff;
   border-radius: 10px;
   cursor: pointer;
   display: flex;
@@ -435,8 +455,8 @@ const currentPoint = computed(() => {
   user-select: none;
 }
 .pad-btn small { font-size: 11px; color: var(--text-3); }
-.pad-btn:hover:not(:disabled) { background: #eef4ff; border-color: #9dbcfb; }
-.pad-btn:active:not(:disabled) { background: #dfeaff; }
+.pad-btn:hover:not(:disabled) { background: var(--brand-weak); border-color: #c9aef5; }
+.pad-btn:active:not(:disabled) { background: #e9dbfc; }
 .pad-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pad-btn.stop { background: var(--danger-weak); border-color: #f3c1bd; color: var(--danger); }
 .pad-btn.diag { font-size: 17px; }
@@ -481,6 +501,12 @@ const currentPoint = computed(() => {
 .patrol-actions .el-button { flex: 1; margin-left: 0; }
 .patrol-card .tip b { color: var(--text-2); font-weight: 500; }
 
+/* 链路信息 */
+.link-grid { display: flex; flex-direction: column; gap: 7px; }
+.lk { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+.lk span { width: 74px; flex: none; color: var(--text-3); }
+.lk b { font-weight: 500; color: var(--text-2); font-size: 11.5px; word-break: break-all; }
+
 .telem {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -502,14 +528,14 @@ const currentPoint = computed(() => {
 
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .trail-card { display: flex; flex-direction: column; }
-.trail { width: 100%; height: 150px; background: #fafbfd; border-radius: 8px; }
+.trail { width: 100%; height: 150px; background: #faf8fe; border-radius: 8px; }
 .trail-empty {
   height: 150px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #b6bfcd;
+  color: var(--text-3);
   background: #fafbfd;
   border-radius: 8px;
 }
@@ -528,12 +554,12 @@ const currentPoint = computed(() => {
   padding: 6px 0;
   font-size: 12px;
   font-family: ui-monospace, Consolas, monospace;
-  border-bottom: 1px dashed #f2f4f8;
+  border-bottom: 1px dashed #f4f0fb;
 }
-.log-list li .t { color: #b6bfcd; flex: none; }
+.log-list li .t { color: var(--text-3); flex: none; }
 .log-list li .txt { color: var(--text-2); }
 .log-list li.bad .txt { color: var(--danger); }
-.log-empty { font-size: 12px; color: #b6bfcd; padding: 14px 0; }
+.log-empty { font-size: 12px; color: var(--text-3); padding: 14px 0; }
 
 @media (max-width: 1100px) {
   .grid { grid-template-columns: 1fr; }
