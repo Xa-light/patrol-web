@@ -50,3 +50,11 @@ export const getPhoto = (photoId) => request.get(`/api/v1/photos/${photoId}`)
 
 export const listMqttPhotos = (params = {}, config = {}) =>
   request.get('/api/v1/mqtt/photos', { params, ...config })
+
+/* ---------------- 实时视频（阶段5） ----------------
+   车端 scout_photo_upload(8081) 提供 MJPEG，云端 /api/v1/video/* 转发。
+   注意：视频流本身由 <img src> 直连请求，axios 不参与，故不在此处导出。 */
+export const getVideoStatus = (config = {}) => request.get('/api/v1/video/status', config)
+
+export const setVideoSwitch = (on, sn = 'scout01') =>
+  request.post('/api/v1/video/switch', { on, sn })

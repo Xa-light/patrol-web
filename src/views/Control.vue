@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import ChartBox from '../components/ChartBox.vue'
-import { drive, setEstop, startPatrol, stopPatrol } from '../api/vehicle'
+import { drive, setEstop, startPatrol, stopPatrol, setVideoSwitch, getVideoStatus } from '../api/vehicle'
 import { useVehicleStore } from '../stores/vehicle'
 import { useAuthStore } from '../stores/auth'
 import { fmtNum, fmtDateTime } from '../utils/format'
@@ -108,9 +108,64 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  // 离开遥控页必须关闭推流：否则车端会一直占着 CPU 与上行带宽
+  if (videoOn.value) turnOffVideo(true)
 })
 
 const canControl = computed(() => auth.hasRole('ADMIN', 'OPERATOR'))
+
+/* ---------------- 实时视频（阶段5） ----------------
+   设计要点：
+   1) 默认关闭。视频按需开启，避免长期占用车端 CPU 与带宽（实测 12fps 约 90KB/s）。
+   2) <img> 无法携带 Authorization 头，故把 JWT 放在查询串 —— 后端 video/stream
+      已兼容 ?token=（见后端 get_current_user）。
+   3) 关闭时把 src 置空：浏览器会立即断开长连接，车端 clients 归零并进入 idle 休眠。
+*/
+const videoOn = ref(false)
+const videoBusy = ref(false)
+const videoError = ref('')
+const videoInfo = ref(null)
+
+const streamUrl = computed(() => {
+  if (!videoOn.value) return ''
+  const token = localStorage.getItem('patrol_token') || ''
+  return `/api/v1/video/stream?token=${encodeURIComponent(token)}`
+})
+
+async function turnOffVideo(silent = false) {
+  videoOn.value = false
+  videoError.value = ''
+  try {
+    await setVideoSwitch(false)
+  } catch (e) {
+    if (!silent) ElMessage.warning('视频开关下发失败，车端可能已离线')
+  }
+}
+
+async function toggleVideo() {
+  if (videoOn.value) return turnOffVideo()
+  videoBusy.value = true
+  videoError.value = ''
+  try {
+    await setVideoSwitch(true)
+    videoOn.value = true
+    const r = await getVideoStatus()
+    videoInfo.value = r?.data || null
+    pushLog('已开启实时视频')
+  } catch (e) {
+    videoOn.value = false
+    videoError.value = '车端视频不可达，请检查车辆在线状态'
+    ElMessage.error(videoError.value)
+  } finally {
+    videoBusy.value = false
+  }
+}
+
+function onVideoError() {
+  if (!videoOn.value) return
+  videoError.value = '视频流中断，请检查车端摄像头'
+  ElMessage.error(videoError.value)
+}
 
 /* ---------------- 自主巡逻 ---------------- */
 const patrolling = computed(() => !!vehicle.telemetry?.patrolling)
@@ -285,6 +340,41 @@ const currentPoint = computed(() => {
           </div>
         </div>
         <p class="tip">车端仲裁层限速 0.8 m/s / 1.0 rad/s，超限会被自动夹紧；松开方向键自动停车。</p>
+      </div>
+
+      <!-- 实时视频（阶段5：默认关闭，按需开启，避免空耗带宽） -->
+      <div class="card card-pad video-card">
+        <div class="card-head">
+          <div class="card-title">
+            实时视频 <span class="card-sub">车端摄像头 MJPEG · {{ videoInfo?.fps || 12 }} fps</span>
+          </div>
+          <button
+            class="video-switch"
+            :class="{ on: videoOn }"
+            :disabled="!canControl || videoBusy"
+            @click="toggleVideo"
+          >
+            <span class="dot" :class="videoOn ? 'on' : 'off'" />
+            {{ videoBusy ? '连接中…' : videoOn ? '关闭视频' : '开启视频' }}
+          </button>
+        </div>
+
+        <div class="video-box">
+          <!-- 关闭时不发任何请求：src 为空，浏览器根本不会建立连接 -->
+          <img v-if="videoOn" :src="streamUrl" class="video-img" alt="车辆实时画面" @error="onVideoError" />
+          <div v-else class="video-off">
+            <div class="video-off-icon">📷</div>
+            <div class="video-off-text">视频已关闭</div>
+            <div class="video-off-sub">点击「开启视频」查看车端实时画面</div>
+          </div>
+          <div v-if="videoError && videoOn" class="video-err">{{ videoError }}</div>
+          <span v-if="videoOn" class="video-live"><span class="dot on" />LIVE</span>
+        </div>
+
+        <p class="tip">
+          视频默认关闭，需要时才开启；关闭后车端立即停止采集，约 90 KB/s 流量可完全省下。
+          {{ canControl ? '' : '当前角色只能查看，不能开关视频。' }}
+        </p>
       </div>
 
       <!-- 自主巡逻 -->
@@ -560,6 +650,81 @@ const currentPoint = computed(() => {
 .log-list li .txt { color: var(--text-2); }
 .log-list li.bad .txt { color: var(--danger); }
 .log-empty { font-size: 12px; color: var(--text-3); padding: 14px 0; }
+
+/* ---------------- 实时视频面板（阶段5） ---------------- */
+.video-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #0f0d16;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+/* MJPEG 是 multipart 长连接，必须让 img 撑满容器且保持原始比例 */
+.video-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+.video-off {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #cfc7dd;
+}
+.video-off-icon { font-size: 30px; opacity: 0.55; }
+.video-off-text { font-size: 14px; font-weight: 600; }
+.video-off-sub { font-size: 12px; color: #8c8399; }
+
+.video-err {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.video-live {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(15, 13, 22, 0.62);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.video-live .dot.on { background: var(--danger); }
+
+.video-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  background: #fdfbff;
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.video-switch:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.video-switch.on {
+  background: var(--ok-weak);
+  border-color: #b7e4c9;
+  color: var(--ok);
+}
+.video-switch:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 1100px) {
   .grid { grid-template-columns: 1fr; }
