@@ -96,6 +96,41 @@ node tests/api-test.mjs --base=http://192.168.1.106:8000
 脚本会逐条打印「编号 / 模块 / 用例 / 状态码 / 耗时 / 结果」，结束时输出模块统计与通过率，
 并把全量明细写入 `tests/report/api-test-result.json`；退出码在有失败时为 1，可直接接入 CI。
 
+## 生产构建与部署
+
+```bash
+# 1. 构建（输出到 dist/）
+npm run build
+
+# 2. 开发代理目标可外置（默认 127.0.0.1:8000）
+cp .env.example .env.local
+# 修改 VITE_API_PROXY=http://192.168.1.106:8000
+
+# 3. Docker 构建（多阶段：node build → nginx:alpine）
+docker build -t patrol-web:latest .
+```
+
+生产环境由 `nginx.conf` 统一处理：
+- `/api` `/uploads` `/static` 反向代理到后端容器
+- SPA fallback（刷新不 404）
+- gzip 压缩
+
+## 压力测试
+
+```bash
+# 零依赖压测（并发 10、持续 30s、测 vehicles 查询）
+node tests/load-test.mjs --base=http://127.0.0.1:8000 --concurrency=10 --duration=30
+```
+
+输出：总请求数 / 成功率 / RPS / avg / p50 / p90 / p99 / max。
+
+## 部署后自检
+
+```bash
+# 一键检查健康、登录(JWT)、MySQL 持久化、前端 SPA 托管
+node tests/deploy-check.mjs --base=http://127.0.0.1:8000
+```
+
 ## 与车端的对接
 
 控制指令经后端转 MQTT `scout/<sn>/cmd/control`（顶层 `linear` / `angular`），
