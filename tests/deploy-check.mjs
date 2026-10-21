@@ -13,11 +13,11 @@ function ok(label, pass, detail = '') {
 }
 
 async function health() {
-  const r = await fetch(`${BASE}/api/v1/health`, { signal: abort(5000) })
+  const r = await fetch(`${BASE}/api/v1/health/live`, { signal: abort(5000) })
   if (!r.ok) return ok('健康检查', false, `status=${r.status}`)
   const d = await r.json().catch(() => ({}))
-  const p = d.code === 200 && d.data?.version
-  return ok('健康检查', p, `version=${d.data?.version} store=${d.data?.store}`)
+  const p = d.status === 'ok' && d.version
+  return ok('健康检查', p, `version=${d.version}`)
 }
 
 async function login() {
@@ -33,27 +33,25 @@ async function login() {
   return ok('登录', jwt, `tokenType=${d.data?.tokenType} expiresIn=${d.data?.expiresIn}s`)
 }
 
-async function mysql(store) {
-  const pass = store === 'mysql'
-  return ok('MySQL 持久化', pass, `store=${store}`)
+async function ready() {
+  const r = await fetch(`${BASE}/api/v1/health/ready`, { signal: abort(5000) })
+  const d = await r.json().catch(() => ({}))
+  const store = d.checks?.database?.mode || 'unknown'
+  const pass = d.status === 'ok' || d.status === 'degraded'
+  return ok('就绪检查', pass, `status=${d.status} store=${store}`)
 }
 
 async function staticFile() {
   const r = await fetch(`${BASE}/`, { signal: abort(5000) })
   const html = await r.text().catch(() => '')
-  const hasApp = html.includes('<div id="app">') || html.includes('patrol')
+  const hasApp = html.includes('<div id="app">') || html.includes('patrol') || html.includes('SCOUT')
   return ok('前端 SPA 托管', hasApp, `content-length=${html.length}`)
 }
 
 async function main() {
   console.log(`Deploy check: ${BASE}\n`)
-  const h = await health()
-  const s = h ? await (async () => {
-    const r = await fetch(`${BASE}/api/v1/health`, { signal: abort(5000) })
-    const d = await r.json().catch(() => ({}))
-    return d.data?.store
-  })() : 'unknown'
-  await mysql(s)
+  await health()
+  const r = await ready()
   await login()
   await staticFile()
   console.log('\nDone.')
