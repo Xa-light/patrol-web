@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import StateHint from '../components/StateHint.vue'
-import { listPhotos, capturePhoto } from '../api/vehicle'
+import { listPhotos, capturePhoto, getPhoto } from '../api/vehicle'
 import { useVehicleStore } from '../stores/vehicle'
 import { useAuthStore } from '../stores/auth'
 import { fmtDateTime } from '../utils/format'
@@ -42,7 +42,19 @@ function fmtSize(n) {
 }
 
 function reasonText(v) {
-  return REASONS.find((r) => r.value === v)?.label || v || '—'
+  if (!v) return '—'
+  const hit = REASONS.find((r) => r.value === v)
+  if (hit) return hit.label
+  // 车端自动抓拍会带告警类型后缀，如 alertobstacle / alertlow_battery
+  const EXTRA = {
+    alertobstacle: '障碍物报警抓拍',
+    alertlow_battery: '低电量报警抓拍',
+    alertstuck: '卡滞报警抓拍',
+    alertcomm_loss: '链路中断抓拍',
+  }
+  if (EXTRA[v]) return EXTRA[v]
+  if (v.startsWith('alert')) return `报警抓拍（${v.slice(5)}）`
+  return v
 }
 
 async function load(silent = false) {
@@ -70,6 +82,27 @@ async function shoot() {
     ElMessage.error(e.message || '抓拍失败')
   } finally {
     setTimeout(() => { capturing.value = false }, 600)
+  }
+}
+
+/* ---------------- 照片详情 ---------------- */
+const detailVisible = ref(false)
+const detail = ref(null)
+const detailLoading = ref(false)
+const detailError = ref('')
+
+async function openDetail(p) {
+  detail.value = p
+  detailError.value = ''
+  detailLoading.value = true
+  detailVisible.value = true
+  try {
+    const data = await getPhoto(p.photoId)
+    if (data) detail.value = { ...p, ...data }
+  } catch (e) {
+    detailError.value = '照片详情加载失败，当前展示列表数据'
+  } finally {
+    detailLoading.value = false
   }
 }
 
@@ -150,10 +183,35 @@ onMounted(() => {
             <span class="size">{{ fmtSize(p.size) }}</span>
           </div>
           <div class="time">{{ fmtDateTime(p.uploadedAt) }}</div>
-          <div class="sn mono">{{ p.sn }}</div>
+          <div class="foot">
+            <span class="sn mono">{{ p.sn }}</span>
+            <button class="more" @click.stop="openDetail(p)">详情</button>
+          </div>
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="detailVisible" title="抓拍详情" width="620px" destroy-on-close>
+      <div v-if="detail" class="pd">
+        <el-image class="pd-img" :src="detail.url" fit="contain" :preview-src-list="[detail.url]" preview-teleported>
+          <template #error><div class="thumb-err">图片无法加载</div></template>
+        </el-image>
+        <div class="info-panel">
+          <div class="row"><span class="k">照片 ID</span><span class="v mono">{{ detail.photoId }}</span></div>
+          <div class="row"><span class="k">抓拍来源</span><span class="v">{{ reasonText(detail.reason) }}</span></div>
+          <div class="row"><span class="k">车辆编号</span><span class="v mono">{{ detail.sn }}</span></div>
+          <div class="row"><span class="k">文件大小</span><span class="v">{{ fmtSize(detail.size) }}</span></div>
+          <div class="row"><span class="k">上传时间</span><span class="v">{{ fmtDateTime(detail.uploadedAt) }}</span></div>
+          <div class="row"><span class="k">存储路径</span><span class="v mono">{{ detail.url }}</span></div>
+        </div>
+        <div v-if="detailError" class="pd-warn">{{ detailError }}</div>
+        <div v-if="detailLoading" class="pd-loading">读取详情…</div>
+      </div>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" tag="a" :href="detail?.url" target="_blank" rel="noopener">原图下载</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -191,5 +249,33 @@ onMounted(() => {
 .meta .line { display: flex; align-items: center; justify-content: space-between; }
 .meta .size { font-size: 11.5px; color: var(--text-3); }
 .meta .time { font-size: 11.5px; color: var(--text-3); }
+.meta .foot { display: flex; align-items: center; justify-content: space-between; }
 .meta .sn { font-size: 11px; color: var(--text-3); }
+.more {
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+.more:hover { text-decoration: underline; }
+
+.pd { display: flex; flex-direction: column; gap: 12px; }
+.pd-img {
+  width: 100%;
+  height: 300px;
+  border-radius: 10px;
+  background: #f6f3fb;
+  cursor: zoom-in;
+}
+.pd-warn {
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-weak);
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+.pd-loading { font-size: 12px; color: var(--text-3); }
 </style>

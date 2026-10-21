@@ -3,7 +3,8 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import StateHint from '../components/StateHint.vue'
 import MetricCard from '../components/MetricCard.vue'
-import { listAlarms, handleAlarm } from '../api/alarm'
+import { listAlarms, handleAlarm, createAlarm } from '../api/alarm'
+import { listVehicles } from '../api/vehicle'
 import { useAuthStore } from '../stores/auth'
 import { useAlarmStore } from '../stores/alarm'
 import { fmtDateTime, ALARM_TYPE_TEXT, ALARM_LEVEL_TEXT } from '../utils/format'
@@ -17,6 +18,7 @@ const error = ref('')
 const statusFilter = ref('PENDING')
 const levelFilter = ref('')
 const typeFilter = ref('')
+const kw = ref('')
 
 const dialogVisible = ref(false)
 const dialogMode = ref('ACKNOWLEDGED')
@@ -42,6 +44,10 @@ const filtered = computed(() =>
     if (statusFilter.value && a.status !== statusFilter.value) return false
     if (levelFilter.value && a.level !== levelFilter.value) return false
     if (typeFilter.value && a.type !== typeFilter.value) return false
+    if (kw.value) {
+      const k = kw.value.trim().toLowerCase()
+      if (!String(a.message || '').toLowerCase().includes(k)) return false
+    }
     return true
   })
 )
@@ -92,6 +98,69 @@ async function submitHandle() {
   }
 }
 
+/* ---------------- 手动上报报警 ---------------- */
+const createVisible = ref(false)
+const createFormRef = ref(null)
+const creating = ref(false)
+const vehicles = ref([])
+const createForm = reactive({
+  vehicleId: '',
+  type: 'OBSTACLE',
+  level: 'WARNING',
+  message: '',
+  x: null,
+  y: null,
+})
+
+const createRules = {
+  vehicleId: [{ required: true, message: '请选择车辆', trigger: 'change' }],
+  message: [{ required: true, message: '请填写报警内容', trigger: 'blur' }],
+}
+
+async function openCreate() {
+  createForm.vehicleId = vehicles.value[0]?.vehicleId || ''
+  createForm.type = 'OBSTACLE'
+  createForm.level = 'WARNING'
+  createForm.message = ''
+  createForm.x = null
+  createForm.y = null
+  createVisible.value = true
+  if (!vehicles.value.length) {
+    try {
+      const data = await listVehicles({ silent: true })
+      vehicles.value = data?.items || []
+      createForm.vehicleId = vehicles.value[0]?.vehicleId || ''
+    } catch (e) {
+      /* 忽略：无车辆时只能填编号 */
+    }
+  }
+}
+
+async function submitCreate() {
+  const ok = await createFormRef.value?.validate().catch(() => false)
+  if (!ok) return
+  creating.value = true
+  try {
+    const payload = {
+      vehicleId: createForm.vehicleId,
+      type: createForm.type,
+      level: createForm.level,
+      message: createForm.message.trim(),
+    }
+    if (createForm.x != null && createForm.y != null) {
+      payload.position = { x: Number(createForm.x), y: Number(createForm.y) }
+    }
+    await createAlarm(payload)
+    ElMessage.success('报警已上报')
+    createVisible.value = false
+    load(true)
+  } catch (e) {
+    /* 已提示 */
+  } finally {
+    creating.value = false
+  }
+}
+
 let timer = null
 onMounted(() => {
   load()
@@ -111,26 +180,38 @@ onBeforeUnmount(() => {
       <MetricCard label="累计报警" :value="counts.total" unit="条" icon="DataLine" tone="green" hint="历史全部记录" />
     </div>
 
-    <div class="page-toolbar">
-      <el-radio-group v-model="statusFilter">
-        <el-radio-button value="PENDING">待处理</el-radio-button>
-        <el-radio-button value="ACKNOWLEDGED">已确认</el-radio-button>
-        <el-radio-button value="CLOSED">已关闭</el-radio-button>
-        <el-radio-button value="">全部</el-radio-button>
-      </el-radio-group>
+    <div class="filter-bar">
+      <span class="fl">处理状态：</span>
+      <el-select v-model="statusFilter" placeholder="全部" style="width: 120px">
+        <el-option label="待处理" value="PENDING" />
+        <el-option label="已确认" value="ACKNOWLEDGED" />
+        <el-option label="已关闭" value="CLOSED" />
+        <el-option label="全部" value="" />
+      </el-select>
 
-      <el-select v-model="levelFilter" placeholder="全部级别" clearable style="width: 130px">
+      <span class="fl">报警级别：</span>
+      <el-select v-model="levelFilter" placeholder="全部" clearable style="width: 118px">
         <el-option label="严重" value="CRITICAL" />
         <el-option label="警告" value="WARNING" />
         <el-option label="提示" value="INFO" />
       </el-select>
 
-      <el-select v-model="typeFilter" placeholder="全部类型" clearable style="width: 140px">
+      <span class="fl">报警类型：</span>
+      <el-select v-model="typeFilter" placeholder="全部" clearable style="width: 126px">
         <el-option v-for="(text, key) in ALARM_TYPE_TEXT" :key="key" :label="text" :value="key" />
       </el-select>
 
+      <el-input
+        v-model="kw"
+        placeholder="报警内容关键字"
+        clearable
+        style="width: 190px"
+        :prefix-icon="'Search'"
+      />
+
       <div class="spacer" />
       <el-button :icon="'Refresh'" @click="load()">刷新</el-button>
+      <el-button v-if="canHandle" type="primary" :icon="'Plus'" @click="openCreate">手动上报</el-button>
     </div>
 
     <div class="card">
@@ -202,17 +283,34 @@ onBeforeUnmount(() => {
       </el-table>
     </div>
 
+    <!-- 处理报警 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="dialogMode === 'CLOSED' ? '关闭报警' : '确认报警'"
-      width="480px"
+      :title="dialogMode === 'CLOSED' ? '报警处理 · 解除告警' : '报警处理 · 受理确认'"
+      width="520px"
       destroy-on-close
+      class="alarm-dialog"
     >
       <div v-if="current" class="dlg-info">
-        <div class="row"><span>类型</span><b>{{ ALARM_TYPE_TEXT[current.type] || current.type }}</b></div>
-        <div class="row"><span>级别</span><b>{{ ALARM_LEVEL_TEXT[current.level] || current.level }}</b></div>
-        <div class="row"><span>内容</span><b>{{ current.message }}</b></div>
-        <div class="row"><span>时间</span><b>{{ fmtDateTime(current.occurredAt) }}</b></div>
+        <div class="di-head">
+          <el-tag size="small" :type="levelType(current.level)" effect="dark">
+            {{ ALARM_LEVEL_TEXT[current.level] || current.level }}
+          </el-tag>
+          <b>{{ ALARM_TYPE_TEXT[current.type] || current.type }}</b>
+          <span class="di-time mono">{{ fmtDateTime(current.occurredAt) }}</span>
+        </div>
+        <p class="di-msg">{{ current.message }}</p>
+        <div class="di-meta">
+          <span v-if="current.vehicleId">车辆 {{ current.vehicleId }}</span>
+          <span v-if="current.position?.x != null" class="mono">
+            位置 {{ Number(current.position.x).toFixed(2) }}, {{ Number(current.position.y).toFixed(2) }}
+          </span>
+          <span>来源 {{ current.source === 'MQTT' ? '车端上报' : current.source === 'SEED' ? '历史记录' : '人工上报' }}</span>
+        </div>
+      </div>
+
+      <div class="dlg-label">
+        {{ dialogMode === 'CLOSED' ? '处理备注（建议填写现场处置情况）' : '受理备注（选填）' }}
       </div>
       <el-input
         v-model="comment"
@@ -220,11 +318,72 @@ onBeforeUnmount(() => {
         :rows="3"
         maxlength="200"
         show-word-limit
-        placeholder="处理说明（选填），例如：现场已清除障碍物"
+        :placeholder="
+          dialogMode === 'CLOSED'
+            ? '例如：现场已清除障碍物，车辆恢复正常巡逻'
+            : '例如：已通知现场人员前往确认'
+        "
       />
+
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitHandle">提交</el-button>
+        <el-button @click="dialogVisible = false">暂不处理</el-button>
+        <el-button
+          :type="dialogMode === 'CLOSED' ? 'danger' : 'primary'"
+          :loading="saving"
+          @click="submitHandle"
+        >
+          {{ dialogMode === 'CLOSED' ? '确认解除告警' : '确认受理' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 手动上报 -->
+    <el-dialog v-model="createVisible" title="手动上报报警" width="500px" destroy-on-close>
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="80px">
+        <el-form-item label="车辆" prop="vehicleId">
+          <el-select v-model="createForm.vehicleId" placeholder="选择车辆" style="width: 100%">
+            <el-option
+              v-for="v in vehicles"
+              :key="v.vehicleId"
+              :label="`${v.name}（${v.code}）`"
+              :value="v.vehicleId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="报警类型">
+          <el-select v-model="createForm.type" style="width: 100%">
+            <el-option v-for="(text, key) in ALARM_TYPE_TEXT" :key="key" :label="text" :value="key" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="报警级别">
+          <el-radio-group v-model="createForm.level">
+            <el-radio value="INFO">提示</el-radio>
+            <el-radio value="WARNING">警告</el-radio>
+            <el-radio value="CRITICAL">严重</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="报警内容" prop="message">
+          <el-input
+            v-model="createForm.message"
+            type="textarea"
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+            placeholder="描述现场情况，例如：车头 0.5m 有临时堆放物料"
+          />
+        </el-form-item>
+        <el-form-item label="坐标">
+          <div class="xy">
+            <el-input-number v-model="createForm.x" :precision="2" :step="0.5" placeholder="X" controls-position="right" />
+            <el-input-number v-model="createForm.y" :precision="2" :step="0.5" placeholder="Y" controls-position="right" />
+            <span class="muted mini">选填，单位 m</span>
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="submitCreate">上报</el-button>
       </template>
     </el-dialog>
   </div>
@@ -244,16 +403,33 @@ onBeforeUnmount(() => {
 .handled .cmt { color: var(--text-3); font-size: 11px; }
 
 .dlg-info {
-  background: #fafbfd;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
+  background: #faf7fe;
+  border: 1px solid var(--brand-line);
+  border-radius: 10px;
+  padding: 13px 15px;
   margin-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
-.dlg-info .row { display: flex; gap: 10px; font-size: 13px; }
-.dlg-info .row span { width: 40px; color: var(--text-3); flex: none; }
-.dlg-info .row b { font-weight: 500; }
+.di-head { display: flex; align-items: center; gap: 8px; }
+.di-head b { font-size: 13.5px; font-weight: 600; }
+.di-time { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.di-msg {
+  margin: 9px 0 8px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-all;
+}
+.di-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.dlg-label { font-size: 12.5px; color: var(--text-2); margin-bottom: 7px; }
+
+.xy { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.xy :deep(.el-input-number) { width: 130px; }
+.mini { font-size: 11.5px; }
 </style>
