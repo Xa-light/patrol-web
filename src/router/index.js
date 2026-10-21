@@ -39,6 +39,12 @@ const routes = [
         meta: { title: '实时控制', icon: 'Aim', roles: ['ADMIN', 'OPERATOR'] },
       },
       {
+        path: 'vehicles',
+        name: 'vehicles',
+        component: () => import('../views/Vehicles.vue'),
+        meta: { title: '车辆管理', icon: 'Van', roles: ['ADMIN', 'OPERATOR'] },
+      },
+      {
         path: 'routes',
         name: 'routes',
         component: () => import('../views/Routes.vue'),
