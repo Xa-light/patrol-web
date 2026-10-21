@@ -30,6 +30,11 @@ defineProps({
   align-items: flex-start;
   gap: 14px;
   padding: 18px;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+.metric:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 .metric-icon {
   width: 40px;
@@ -41,7 +46,7 @@ defineProps({
   flex: none;
 }
 .metric-icon :deep(svg) { width: 20px; height: 20px; }
-.metric-icon.blue { background: #eaf1ff; color: #2b6cf6; }
+.metric-icon.blue, .metric-icon.violet { background: #f1e9fe; color: #7c3aed; }
 .metric-icon.green { background: #e6f7ed; color: #1c9a63; }
 .metric-icon.amber { background: #fdf6ec; color: #c98118; }
 .metric-icon.red { background: #fdeeec; color: #cf4436; }

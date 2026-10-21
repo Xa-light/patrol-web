@@ -53,7 +53,16 @@ async function quickLogin(acc) {
   <div class="login-page">
     <section class="brand-side">
       <div class="brand-top">
-        <div class="logo">S</div>
+        <div class="logo">
+          <svg viewBox="0 0 32 32" width="19" height="19" aria-hidden="true">
+            <rect x="7" y="9" width="18" height="14" rx="5" fill="none" stroke="#fff" stroke-width="2" />
+            <circle cx="13" cy="15" r="1.8" fill="#fff" />
+            <circle cx="19" cy="15" r="1.8" fill="#fff" />
+            <path d="M13 19.5h6" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+            <path d="M16 9V6" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+            <circle cx="16" cy="5" r="1.6" fill="#fff" />
+          </svg>
+        </div>
         <span>SCOUT MINI · 巡逻管控平台</span>
       </div>
 
@@ -135,7 +144,7 @@ async function quickLogin(acc) {
 .brand-side {
   width: 46%;
   max-width: 620px;
-  background: #10233f;
+  background: linear-gradient(158deg, #3a0a5c 0%, #4c1279 48%, #5d1a92 100%);
   color: #fff;
   padding: 40px 48px;
   display: flex;
@@ -151,20 +160,31 @@ async function quickLogin(acc) {
   bottom: -120px;
   width: 360px;
   height: 360px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 50%;
 }
-.brand-top { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #b9c7dc; }
+.brand-side::before {
+  content: '';
+  position: absolute;
+  left: -160px;
+  top: -160px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 108, 246, 0.35), transparent 68%);
+  pointer-events: none;
+}
+.brand-top { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
 .logo {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #2b6cf6;
-  color: #fff;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
 }
 .brand-main { max-width: 420px; }
 .brand-main h1 {
@@ -174,7 +194,7 @@ async function quickLogin(acc) {
   margin: 0 0 16px;
   letter-spacing: 0.5px;
 }
-.brand-main > p { color: #9fb0c9; font-size: 13px; line-height: 1.8; margin: 0 0 32px; }
+.brand-main > p { color: rgba(255, 255, 255, 0.66); font-size: 13px; line-height: 1.8; margin: 0 0 32px; }
 
 .feature-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 18px; }
 .feature-list li { display: flex; gap: 12px; align-items: flex-start; }
@@ -182,14 +202,14 @@ async function quickLogin(acc) {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #7fa8ff;
+  background: rgba(255, 255, 255, 0.10);
+  color: #d8b4fe;
   flex: none;
 }
 .feature-list div { display: flex; flex-direction: column; gap: 2px; }
 .feature-list b { font-size: 13px; font-weight: 500; }
-.feature-list span { font-size: 12px; color: #8fa1bb; }
-.brand-foot { font-size: 11px; color: #6b7d99; }
+.feature-list span { font-size: 12px; color: rgba(255, 255, 255, 0.56); }
+.brand-foot { font-size: 11px; color: rgba(255, 255, 255, 0.44); }
 
 /* ---------- 右侧表单 ---------- */
 .form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; }
@@ -226,7 +246,7 @@ async function quickLogin(acc) {
   text-align: left;
   transition: 0.12s;
 }
-.demo-item:hover { border-color: #9dbcfb; background: #f4f8ff; }
+.demo-item:hover { border-color: #c9aef5; background: var(--brand-weak); }
 .demo-item b { font-size: 13px; font-weight: 500; width: 48px; }
 .demo-item span { font-size: 12px; color: var(--text-2); font-family: ui-monospace, Consolas, monospace; }
 .demo-item em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--text-3); }
